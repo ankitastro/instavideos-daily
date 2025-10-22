@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Video and image files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+
+# Output directories
+**/output/
+**/circular/
+**/with_logo/
+AstroImages_circular/
+circular_videos/
+
+# Temporary files
+temp_*
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Archives
+*.zip
+
+# Specific folders
+Festivals/
+Shambu/
+simple_ads/
+AstroImages/
