@@ -2,12 +2,21 @@
 
 A comprehensive collection of Python scripts for processing images and videos for social media content creation, specifically designed for astrology and similar content.
 
+## Sample Output
+
+Here's an example of a circular video created with this toolkit:
+
+![Circular Video Sample](samples/shaadi-nahi-ho-pa-rahi.gif)
+
+*Circular video with face detection and transparent background - perfect for social media overlays*
+
 ## Features
 
 - **Add Logo to Images**: Watermark images with a logo in any corner with customizable position and scale
 - **Create Circular Images**: Convert photos to circular format with intelligent face detection and transparent backgrounds
 - **Create Circular Videos**: Convert videos to circular format with transparent backgrounds, face detection, and smooth processing
 - **Extract Audio**: Extract audio from video files in multiple formats (MP3, WAV, AAC, OGG, FLAC, M4A)
+- **Video to GIF**: Convert videos to high-quality GIF format with customizable size and quality
 
 ## Quick Start
 
@@ -124,6 +133,56 @@ python extract_audio.py video.mp4 --format aac --quality 256k
 - Batch directory processing
 - Preserves audio quality with configurable settings
 - Fast extraction using ffmpeg
+
+### 5. video_to_gif.py
+Convert videos to high-quality GIF format with optimized color palettes.
+
+**Usage:**
+```bash
+python video_to_gif.py <input_file_or_directory> [options]
+
+Options:
+  --output <path>     Output file/directory path
+  --fps <number>      Frames per second (default: 10)
+                      Lower = smaller file, Less smooth
+                      Higher = larger file, More smooth
+                      Common values: 10, 15, 20, 24
+  --width <pixels>    Width in pixels (height auto-calculated)
+                      Common values: 320, 480, 640, 800
+  --quality <level>   Quality: low, medium, high (default: medium)
+                      low: 128 colors, smaller file
+                      medium: 256 colors, balanced
+                      high: 256 colors, best dithering
+  --start <seconds>   Start time in seconds (for extracting segment)
+  --duration <sec>    Duration in seconds (for extracting segment)
+```
+
+**Examples:**
+```bash
+# Basic conversion
+python video_to_gif.py video.mp4
+
+# Custom size and quality
+python video_to_gif.py video.mp4 --width 480 --fps 15 --quality high
+
+# Extract 5-second segment starting at 10s
+python video_to_gif.py video.mp4 --start 10 --duration 5
+
+# Process entire directory
+python video_to_gif.py videos/ --output gifs/ --width 640 --fps 20
+
+# Small file size for sharing
+python video_to_gif.py video.mp4 --width 320 --fps 10 --quality low
+```
+
+**Features:**
+- Two-pass conversion with optimized color palette generation
+- High-quality Lanczos scaling
+- Multiple quality presets (128-256 colors)
+- Advanced dithering algorithms (Floyd-Steinberg, Bayer)
+- Extract specific time segments
+- Batch directory processing
+- Looping GIFs for social media
 
 ## Typical Workflow
 

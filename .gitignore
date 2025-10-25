@@ -18,9 +18,12 @@ env/
 *.png
 *.jpg
 *.jpeg
-*.gif
 *.bmp
 *.tiff
+
+# GIF files (except samples folder)
+*.gif
+!samples/*.gif
 
 # Output directories
 **/output/
