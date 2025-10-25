@@ -6,7 +6,7 @@ A comprehensive collection of Python scripts for processing images and videos fo
 
 Here's an example of a circular video created with this toolkit:
 
-![Circular Video Sample](samples/shaadi-nahi-ho-pa-rahi.gif)
+![Circular Video Sample](samples/circular_video_sample.gif)
 
 *Circular video with face detection and transparent background - perfect for social media overlays*
 
