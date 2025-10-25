@@ -265,4 +265,6 @@ This toolkit is perfect for:
 
 ## License
 
-This project is for personal/commercial use in social media content creation.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+You are free to use, modify, and distribute this software for personal or commercial use.
