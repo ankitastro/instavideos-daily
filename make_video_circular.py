@@ -10,6 +10,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw
+from tqdm import tqdm
+from multiprocessing import Pool, cpu_count
 
 def detect_face_in_frame(frame):
     """
@@ -46,7 +48,55 @@ def detect_face_in_frame(frame):
 
     return None
 
-def make_video_circular(input_path, output_path, output_size=500):
+def process_single_frame(args):
+    """
+    Process a single frame to make it circular with transparent background.
+    This function is designed to be called in parallel by multiprocessing.
+
+    Args:
+        args: Tuple of (frame_data, frame_number, crop_coords, output_size, frames_dir)
+
+    Returns:
+        frame_number: The frame number that was processed
+    """
+    frame_data, frame_number, crop_coords, output_size, frames_dir = args
+    left, top, right, bottom = crop_coords
+
+    # Decode frame from bytes
+    frame = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+    # Crop frame to square centered on face
+    cropped = frame[top:bottom, left:right]
+
+    # Convert BGR to RGB
+    rgb_frame = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+
+    # Convert to PIL Image
+    pil_img = Image.fromarray(rgb_frame)
+
+    # Resize to output size
+    pil_img = pil_img.resize((output_size, output_size), Image.LANCZOS)
+
+    # Convert to RGBA and apply circular mask
+    pil_img = pil_img.convert('RGBA')
+
+    # Create circular mask
+    mask_pil = Image.new('L', (output_size, output_size), 0)
+    draw = ImageDraw.Draw(mask_pil)
+    draw.ellipse((0, 0, output_size, output_size), fill=255)
+
+    # Create transparent background
+    output_frame = Image.new('RGBA', (output_size, output_size), (0, 0, 0, 0))
+    output_frame.paste(pil_img, (0, 0))
+    output_frame.putalpha(mask_pil)
+
+    # Save frame as PNG with transparency
+    frame_path = os.path.join(frames_dir, f"frame_{frame_number:06d}.png")
+    output_frame.save(frame_path, 'PNG')
+
+    return frame_number
+
+def make_video_circular(input_path, output_path, output_size=500, crop_scale=2.5):
     """
     Convert a video to circular format with transparent background.
     Uses face detection on the first frame to determine cropping.
@@ -55,6 +105,10 @@ def make_video_circular(input_path, output_path, output_size=500):
         input_path: Path to the input video file
         output_path: Path for the output video file
         output_size: Final output size in pixels (default: 500x500)
+        crop_scale: Scale factor for crop radius around face (default: 2.5)
+                   Higher values = wider radius, more context around face
+                   Lower values = tighter crop, closer to face
+                   Typical range: 2.0 (tight) to 4.0 (wide)
     """
     try:
         # Open the video
@@ -84,8 +138,9 @@ def make_video_circular(input_path, output_path, output_size=500):
 
         if face_info:
             center_x, center_y, face_size = face_info
-            # Add padding around face (2.5x the face size for good framing)
-            size = int(face_size * 2.5)
+            # Add padding around face using crop_scale factor
+            size = int(face_size * crop_scale)
+            print(f"  Using crop scale: {crop_scale}x (radius multiplier)")
             # Make sure size doesn't exceed video boundaries
             size = min(size, width, height)
 
@@ -132,50 +187,38 @@ def make_video_circular(input_path, output_path, output_size=500):
         frames_dir = os.path.join(temp_dir, "frames")
         os.makedirs(frames_dir, exist_ok=True)
 
-        # Create circular mask for PIL
-        mask_pil = Image.new('L', (output_size, output_size), 0)
-        draw = ImageDraw.Draw(mask_pil)
-        draw.ellipse((0, 0, output_size, output_size), fill=255)
+        # Read all frames into memory and encode them
+        print(f"  Reading frames from video...")
+        frames_data = []
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-        # Process each frame
-        frame_count = 0
-        print(f"  Processing frames with transparency...")
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Crop frame to square centered on face
-            cropped = frame[top:bottom, left:right]
-
-            # Convert BGR to RGB
-            rgb_frame = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
-
-            # Convert to PIL Image
-            pil_img = Image.fromarray(rgb_frame)
-
-            # Resize to output size
-            pil_img = pil_img.resize((output_size, output_size), Image.LANCZOS)
-
-            # Convert to RGBA and apply circular mask
-            pil_img = pil_img.convert('RGBA')
-
-            # Create transparent background
-            output_frame = Image.new('RGBA', (output_size, output_size), (0, 0, 0, 0))
-            output_frame.paste(pil_img, (0, 0))
-            output_frame.putalpha(mask_pil)
-
-            # Save frame as PNG with transparency
-            frame_path = os.path.join(frames_dir, f"frame_{frame_count:06d}.png")
-            output_frame.save(frame_path, 'PNG')
-
-            frame_count += 1
-            if frame_count % 30 == 0:
-                print(f"  Processed {frame_count}/{total_frames} frames...")
+        with tqdm(total=total_frames, desc="  Reading frames", unit="frame", ncols=80) as pbar:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                # Encode frame to bytes for passing to worker processes
+                _, encoded = cv2.imencode('.jpg', frame)
+                frames_data.append(encoded.tobytes())
+                pbar.update(1)
 
         # Release video capture
         cap.release()
+
+        # Prepare arguments for parallel processing
+        crop_coords = (left, top, right, bottom)
+        process_args = [
+            (frame_data, frame_num, crop_coords, output_size, frames_dir)
+            for frame_num, frame_data in enumerate(frames_data)
+        ]
+
+        # Process frames in parallel with progress bar
+        print(f"  Processing {len(frames_data)} frames with {cpu_count()} CPU cores...")
+
+        with Pool(processes=cpu_count()) as pool:
+            with tqdm(total=len(frames_data), desc="  Processing frames", unit="frame", ncols=80) as pbar:
+                for _ in pool.imap(process_single_frame, process_args):
+                    pbar.update(1)
 
         print(f"  Creating video with transparency...")
 
@@ -217,7 +260,7 @@ def make_video_circular(input_path, output_path, output_size=500):
         traceback.print_exc()
         return False
 
-def process_directory(input_dir, output_dir=None, output_size=500):
+def process_directory(input_dir, output_dir=None, output_size=500, crop_scale=2.5):
     """
     Process all video files in a directory.
 
@@ -225,6 +268,7 @@ def process_directory(input_dir, output_dir=None, output_size=500):
         input_dir: Directory containing video files
         output_dir: Output directory (if None, creates 'output' subdirectory)
         output_size: Final output size in pixels (default: 500x500)
+        crop_scale: Scale factor for crop radius around face (default: 2.5)
     """
     input_path = Path(input_dir)
 
@@ -250,6 +294,7 @@ def process_directory(input_dir, output_dir=None, output_size=500):
 
     print(f"Found {len(video_files)} video file(s)")
     print(f"Output resolution: {output_size}x{output_size} pixels")
+    print(f"Crop scale: {crop_scale}x (radius multiplier)")
     print("-" * 50)
 
     # Create output directory
@@ -261,11 +306,11 @@ def process_directory(input_dir, output_dir=None, output_size=500):
     out_path.mkdir(parents=True, exist_ok=True)
 
     success_count = 0
-    for video_file in sorted(video_files):
+    for video_file in tqdm(sorted(video_files), desc="Processing videos", unit="video"):
         output_file = out_path / f"{video_file.stem}_circular.mp4"
 
         print(f"\nProcessing: {video_file.name}")
-        if make_video_circular(str(video_file), str(output_file), output_size):
+        if make_video_circular(str(video_file), str(output_file), output_size, crop_scale):
             success_count += 1
 
     print("-" * 50)
@@ -275,17 +320,24 @@ def main():
     """Main function to parse arguments and process videos."""
 
     if len(sys.argv) < 2:
-        print("Usage: python make_video_circular.py <input_directory> [output_directory] [--size SIZE]")
+        print("Usage: python make_video_circular.py <input_directory> [output_directory] [OPTIONS]")
         print("\nOptions:")
-        print("  --size SIZE    Output resolution in pixels (default: 500)")
-        print("\nExample:")
+        print("  --size SIZE         Output resolution in pixels (default: 500)")
+        print("  --radius SCALE      Crop radius scale around face (default: 2.5)")
+        print("                      Higher = wider radius (more context)")
+        print("                      Lower = tighter crop (closer to face)")
+        print("                      Typical range: 2.0 (tight) to 4.0 (wide)")
+        print("\nExamples:")
         print("  python make_video_circular.py circular_videos")
-        print("  python make_video_circular.py circular_videos output --size 500")
+        print("  python make_video_circular.py circular_videos output --size 1000")
+        print("  python make_video_circular.py circular_videos --radius 3.5")
+        print("  python make_video_circular.py circular_videos output --size 1000 --radius 3.0")
         sys.exit(1)
 
     input_dir = sys.argv[1]
     output_dir = None
     output_size = 500
+    crop_scale = 2.5
 
     # Parse arguments
     i = 2
@@ -293,13 +345,16 @@ def main():
         if sys.argv[i] == "--size" and i + 1 < len(sys.argv):
             output_size = int(sys.argv[i + 1])
             i += 2
+        elif sys.argv[i] == "--radius" and i + 1 < len(sys.argv):
+            crop_scale = float(sys.argv[i + 1])
+            i += 2
         elif not sys.argv[i].startswith("--"):
             output_dir = sys.argv[i]
             i += 1
         else:
             i += 1
 
-    process_directory(input_dir, output_dir, output_size)
+    process_directory(input_dir, output_dir, output_size, crop_scale)
 
 if __name__ == "__main__":
     main()

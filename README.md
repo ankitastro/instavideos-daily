@@ -70,29 +70,41 @@ Converts videos to circular format with face detection and transparent backgroun
 
 **Usage:**
 ```bash
-python make_video_circular.py <input_directory> [output_directory] [--size SIZE]
+python make_video_circular.py <input_directory> [output_directory] [OPTIONS]
 
 Options:
-  --size SIZE    Output resolution in pixels (default: 500)
+  --size SIZE         Output resolution in pixels (default: 500)
+  --radius SCALE      Crop radius scale around face (default: 2.5)
+                      Higher = wider radius (more context)
+                      Lower = tighter crop (closer to face)
+                      Typical range: 2.0 (tight) to 4.0 (wide)
 ```
 
-**Example:**
+**Examples:**
 ```bash
 # Process single video
 python -c "
 from make_video_circular import make_video_circular
-make_video_circular('input.mp4', 'output.mov', 1000)
+make_video_circular('input.mp4', 'output.mov', 1000, 3.5)
 "
 
-# Process directory
+# Process directory with default settings
 python make_video_circular.py circular_videos output --size 1000
+
+# Process with wider radius for more context
+python make_video_circular.py circular_videos output --size 1000 --radius 3.5
+
+# Tight crop focusing on face
+python make_video_circular.py circular_videos --radius 2.0
 ```
 
 **Features:**
 - Face detection on first frame for optimal centering
+- Adjustable crop radius for controlling how much context is captured
 - Transparent background (MOV output with PNG codec)
 - Customizable resolution (typically 1000x1000 for social media)
-- Progress tracking during processing
+- Multiprocessing support (uses all CPU cores for faster processing)
+- Real-time progress bars with tqdm
 - Batch processing support
 
 ### 4. extract_audio.py
